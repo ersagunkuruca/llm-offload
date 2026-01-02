@@ -511,8 +511,7 @@ mcp = FastMCP("llm-offload")
 
 @mcp.tool()
 def clog(
-    file_path: str = None,
-    log_content: str = None,
+    file_path: str,
     prompt: str = None,
     no_llm: bool = False,
     max_lines: int = None,
@@ -520,12 +519,11 @@ def clog(
 ) -> str:
     """Compress and summarize log files using local LLM.
 
-    Reduces log files to structured summaries, saving context window space.
-    Uses deterministic compression + local Qwen2.5 7B for analysis.
+    The file is read locally by clog, not by Claude - this saves context window space.
+    Only the compressed summary is returned.
 
     Args:
         file_path: Path to log file to analyze
-        log_content: Raw log content (alternative to file_path)
         prompt: Specific question to focus the analysis on (e.g., "What caused the OOM?")
         no_llm: If True, only run compression without LLM summary
         max_lines: Maximum lines to process
@@ -545,27 +543,16 @@ def clog(
     if around_error != 5:
         cmd.extend(["--around-error", str(around_error)])
 
+    cmd.append(file_path)
+
     try:
-        if file_path:
-            cmd.append(file_path)
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                env={**os.environ, "PATH": f"{os.environ.get('HOME')}/bin:{os.environ.get('PATH', '')}"}
-            )
-        elif log_content:
-            result = subprocess.run(
-                cmd,
-                input=log_content,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                env={**os.environ, "PATH": f"{os.environ.get('HOME')}/bin:{os.environ.get('PATH', '')}"}
-            )
-        else:
-            return "Error: Either file_path or log_content must be provided"
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={**os.environ, "PATH": f"{os.environ.get('HOME')}/bin:{os.environ.get('PATH', '')}"}
+        )
 
         if result.returncode != 0:
             return f"Error running clog: {result.stderr}"
@@ -583,7 +570,6 @@ def clog(
 @mcp.tool()
 def local_llm(
     prompt: str,
-    input_text: str = None,
     input_file: str = None,
     model: str = "qwen2.5:7b-instruct"
 ) -> str:
@@ -592,10 +578,11 @@ def local_llm(
     Use this for token-heavy simple tasks: summarization, format conversion,
     boilerplate generation, bulk transformations.
 
+    The file is read locally, not by Claude - this saves context window space.
+
     Args:
         prompt: The instruction/question for the LLM
-        input_text: Optional text to process (sent before prompt)
-        input_file: Optional file path to read and process
+        input_file: Optional file path to read and process (read locally, saves tokens)
         model: Ollama model to use (default: qwen2.5:7b-instruct)
 
     Returns:
@@ -610,8 +597,6 @@ def local_llm(
                     full_prompt = f.read() + "\n\n"
             except Exception as e:
                 return f"Error reading file: {e}"
-        elif input_text:
-            full_prompt = input_text + "\n\n"
 
         full_prompt += prompt
 
@@ -632,6 +617,127 @@ def local_llm(
         return "Error: Ollama timed out after 120 seconds"
     except FileNotFoundError:
         return "Error: Ollama not found. Is it installed and running?"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+def pipe_to_llm(
+    command: str,
+    prompt: str,
+    model: str = "qwen2.5:7b-instruct"
+) -> str:
+    """Run a shell command and pipe its output to the local LLM.
+
+    The command output is never seen by Claude - only the LLM's response is returned.
+    This saves tokens when processing large command outputs.
+
+    Args:
+        command: Shell command to run (e.g., "git diff", "docker logs app")
+        prompt: Instruction for the LLM on how to process the output
+        model: Ollama model to use (default: qwen2.5:7b-instruct)
+
+    Returns:
+        LLM response based on command output
+    """
+    try:
+        # Run the command
+        cmd_result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        cmd_output = cmd_result.stdout
+        if cmd_result.stderr:
+            cmd_output += "\n\nSTDERR:\n" + cmd_result.stderr
+
+        if not cmd_output.strip():
+            return "Command produced no output"
+
+        # Pipe to LLM
+        full_prompt = cmd_output + "\n\n" + prompt
+
+        result = subprocess.run(
+            ["ollama", "run", model],
+            input=full_prompt,
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode != 0:
+            return f"Error calling Ollama: {result.stderr}"
+
+        return result.stdout.strip()
+
+    except subprocess.TimeoutExpired:
+        return "Error: Command or Ollama timed out"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+def pipe_to_clog(
+    command: str,
+    prompt: str = None,
+    no_llm: bool = False
+) -> str:
+    """Run a shell command and pipe its output through clog for log analysis.
+
+    The command output is never seen by Claude - only the compressed summary is returned.
+    Use this for log-producing commands like docker logs, kubectl logs, journalctl, etc.
+
+    Args:
+        command: Shell command to run (e.g., "docker logs app", "kubectl logs pod")
+        prompt: Optional question to focus the analysis (e.g., "What caused the crash?")
+        no_llm: If True, only run compression without LLM summary
+
+    Returns:
+        Compressed log summary with optional LLM analysis
+    """
+    try:
+        # Run the command
+        cmd_result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        cmd_output = cmd_result.stdout
+        if cmd_result.stderr:
+            cmd_output += "\n" + cmd_result.stderr
+
+        if not cmd_output.strip():
+            return "Command produced no output"
+
+        # Pipe to clog
+        clog_cmd = ["clog"]
+        if prompt:
+            clog_cmd.extend(["-p", prompt])
+        if no_llm:
+            clog_cmd.append("--no-llm")
+
+        result = subprocess.run(
+            clog_cmd,
+            input=cmd_output,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={**os.environ, "PATH": f"{os.environ.get('HOME')}/bin:{os.environ.get('PATH', '')}"}
+        )
+
+        if result.returncode != 0:
+            return f"Error running clog: {result.stderr}"
+
+        return result.stdout
+
+    except subprocess.TimeoutExpired:
+        return "Error: Command or clog timed out"
     except Exception as e:
         return f"Error: {e}"
 

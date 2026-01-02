@@ -349,36 +349,36 @@ Once registered, Claude Code has access to:
 
 | Tool | Description |
 |------|-------------|
-| `clog` | Compress and summarize log files using local LLM |
-| `local_llm` | Run any prompt through Ollama (for token-heavy simple tasks) |
+| `clog` | Compress and summarize log files (file read locally, saves tokens) |
+| `local_llm` | Run prompts through Ollama with optional file input |
+| `pipe_to_llm` | Run shell command and pipe output to LLM (output never seen by Claude) |
+| `pipe_to_clog` | Run shell command and pipe output through clog (for log-producing commands) |
 | `clog_file_list` | List log files in a directory with sizes |
 
 ### Example Usage (from Claude's perspective)
 
-Claude can now call these tools directly:
-
 ```python
-# Analyze a log file with a focused question
+# Analyze a log file (clog reads the file, Claude only sees summary)
 clog(file_path="/var/log/app.log", prompt="What caused the OOM?")
 
-# Analyze log content directly (e.g., from command output)
-clog(log_content="...", prompt="What caused the errors?")
-
-# Offload summarization to local model
-local_llm(prompt="Summarize this in one sentence", input_text="...")
-
-# Generate boilerplate locally
+# Process a file with local LLM (file read locally, saves tokens)
 local_llm(prompt="Write unit tests for these functions", input_file="api.py")
+
+# Pipe command output to LLM (Claude never sees the raw output)
+pipe_to_llm(command="git diff HEAD~5", prompt="Write a changelog for these changes")
+
+# Pipe log-producing commands through clog
+pipe_to_clog(command="docker logs myapp --tail 1000", prompt="What caused the crash?")
+pipe_to_clog(command="kubectl logs deployment/api", prompt="Any errors?")
+pipe_to_clog(command="journalctl -u nginx --since '1 hour ago'")
 
 # Find log files to analyze
 clog_file_list(directory="./logs", pattern="*.log")
 ```
 
-### Verified Working
+### Key Design Principle
 
-Both tools have been tested and work correctly:
-- `local_llm`: Handles creative prompts, summarization, and text processing
-- `clog`: Compresses logs, identifies error patterns, and provides LLM analysis
+All tools read files/commands locally - Claude never sees the raw content, only the processed result. This is what saves tokens.
 
 ### Remove MCP Server
 
