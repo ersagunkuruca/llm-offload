@@ -1,59 +1,201 @@
 # LLM Offload for Claude Code
 
-Offload token-heavy tasks to a local LLM to save context window space and reduce costs. Includes specialized log compression and a general-purpose local LLM interface.
+Offload token-heavy tasks to a local LLM to save context window space and reduce costs. Claude reads files and command outputs locally through MCP tools - you never paste large logs or outputs into the chat.
 
-## How Token Savings Work
+## How It Works
 
-**Important**: To save tokens, offload processing to the local model BEFORE sending to Claude:
+Once installed, just ask Claude to analyze logs or process files. Claude uses local MCP tools that read content on your machine - the raw data never enters the conversation, only the processed summary.
 
-```bash
-# Step 1: Compress logs locally (uses local LLM, not Claude)
-clog app.log > summary.txt
+```
+You: "Analyze the logs in /var/log/app.log, what caused the crash?"
+Claude: [Uses clog tool locally, returns summary]
 
-# Step 2: Send ONLY the summary to Claude Code
-# Copy summary.txt content, paste to Claude
+You: "Check the docker logs for my api container"
+Claude: [Uses pipe_to_clog tool, runs docker logs, returns analysis]
+
+You: "Write a changelog from the last 5 commits"
+Claude: [Uses pipe_to_llm tool, runs git diff, returns changelog]
 ```
 
-This way Claude never sees the raw 15,000 lines - only the ~50 line summary.
-
-## Components
-
-1. **Ollama** - Local LLM runtime (runs on your machine, free)
-2. **Qwen2.5 7B Instruct** - Default model for summarization (local)
-3. **clog** - CLI tool for log compression and summarization
-4. **MCP Server** - Optional native Claude Code tool integration
-5. **Reference docs** - Agent behavior guides in `~/.claude/agents/`
-
-## Quick Start
+## Installation
 
 ```bash
-# Log compression and summarization
-clog app.log
-clog -p "What caused the OOM error?" app.log
-docker logs myapp | clog
+# Clone and run installer
+git clone https://github.com/ersagunkuruca/llm-offload.git
+cd llm-offload
+./install.sh
+```
 
-# General-purpose local LLM
-ollama run qwen2.5:7b-instruct "Summarize this" < report.txt
-git diff | ollama run qwen2.5:7b-instruct "Write a commit message"
+This installs:
+- **Ollama** - Local LLM runtime
+- **Qwen2.5 7B** - Default model for analysis
+- **clog** - Log compression CLI
+- **MCP Server** - Claude Code integration
+
+### Verify Installation
+
+```bash
+ollama list                 # Check Ollama is running
+claude mcp list             # Check MCP server is registered
+```
+
+## What You Can Ask Claude
+
+### Analyze Log Files
+
+```
+"Analyze /var/log/nginx/error.log"
+"What errors are in ./app.log?"
+"Check ~/logs/api.log for OOM errors"
+```
+
+Claude uses the `clog` tool which:
+- Reads the file locally (you never see raw logs)
+- Compresses and deduplicates log lines
+- Identifies error patterns and context
+- Returns a structured summary with LLM analysis
+
+### Analyze Container/Service Logs
+
+```
+"Check the docker logs for myapp container"
+"What's in the kubernetes logs for the api deployment?"
+"Analyze journalctl logs for nginx from the last hour"
+```
+
+Claude uses the `pipe_to_clog` tool which:
+- Runs the log command (docker logs, kubectl logs, journalctl, etc.)
+- Pipes output through clog compression
+- Returns analysis without you seeing raw output
+
+Example commands Claude might run:
+- `docker logs myapp --tail 1000`
+- `kubectl logs deployment/api`
+- `journalctl -u nginx --since "1 hour ago"`
+
+### Process Command Output
+
+```
+"Write a changelog from the last 5 commits"
+"Summarize the git diff"
+"What dependencies are in package.json?"
+```
+
+Claude uses the `pipe_to_llm` tool which:
+- Runs your command (git diff, cat, etc.)
+- Sends output to local Ollama
+- Returns the LLM's response
+
+You never see the raw command output - just the processed result.
+
+### Process Files with Local LLM
+
+```
+"Summarize the README in that repo"
+"Add docstrings to utils.py"
+"Convert config.yaml to JSON format"
+```
+
+Claude uses the `local_llm` tool which:
+- Reads the file locally
+- Processes it with Ollama
+- Returns the result
+
+Good for token-heavy simple tasks: summarization, format conversion, boilerplate generation.
+
+### Find Log Files
+
+```
+"What log files are in ./logs?"
+"Find all .log files in /var/log"
+```
+
+Claude uses `clog_file_list` to find and list log files with their sizes.
+
+## MCP Tools Reference
+
+| Tool | What It Does | When Claude Uses It |
+|------|--------------|---------------------|
+| `clog` | Analyze log files | "Analyze this log file" |
+| `pipe_to_clog` | Run command, analyze output as logs | "Check docker/kubectl/journalctl logs" |
+| `pipe_to_llm` | Run command, process output with LLM | "Summarize git diff", "Write changelog" |
+| `local_llm` | Process file with LLM | "Summarize this file", "Add docstrings" |
+| `clog_file_list` | List log files in directory | "What log files exist?" |
+
+### Key Design Principle
+
+All tools read files and run commands locally - Claude never sees the raw content, only the processed result. This is what saves tokens.
+
+### Verified Working
+
+All 5 MCP tools have been tested:
+- `clog_file_list` - Lists log files with sizes
+- `local_llm` - Runs prompts through Ollama
+- `pipe_to_llm` - Pipes command output to LLM
+- `clog` - Analyzes log files with compression + LLM summary
+- `pipe_to_clog` - Pipes command output through clog
+
+## Troubleshooting
+
+### "Ollama not running"
+```bash
+brew services start ollama   # macOS
+# or
+ollama serve                 # manual start
+```
+
+### "Model not found"
+```bash
+ollama pull qwen2.5:7b-instruct
+```
+
+### Slow first run
+Normal - the model loads into memory. Subsequent runs are faster.
+
+### Out of memory
+Try a smaller model:
+```bash
+ollama pull qwen2.5:3b-instruct
+```
+
+### MCP server not working
+```bash
+# Check it's registered
+claude mcp list
+
+# Re-register if needed
+claude mcp add --transport stdio llm-offload --scope user -- \
+  ~/llm-offload/mcp-server/venv/bin/python \
+  ~/llm-offload/mcp-server/server.py
+```
+
+---
+
+# Manual CLI Usage (Optional)
+
+You can also use these tools directly from the command line, without Claude.
+
+## clog Command
+
+Compress and analyze log files:
+
+```bash
+# Basic usage
+clog app.log
+
+# With focused question
+clog -p "What caused the OOM error?" app.log
+
+# Pipe from commands
+docker logs myapp | clog
+kubectl logs deployment/api | clog
+journalctl -u nginx --since "1 hour ago" | clog
 
 # Compression only (no LLM)
 clog --no-llm app.log
 ```
 
-## Installation Verification
-
-```bash
-# Check Ollama is running
-ollama list
-
-# Check clog is available
-clog --help
-
-# Check agents are installed
-ls ~/.claude/agents/
-```
-
-## clog Command Reference
+### clog Options
 
 ```
 Usage: clog [OPTIONS] [FILES...]
@@ -64,54 +206,55 @@ Options:
   --around-error K     Keep K lines around errors (default: 5)
   --json               Output as JSON
   --model NAME         Use different Ollama model
-  --compression-only   Alias for --no-llm
   -p, --prompt TEXT    Focus LLM analysis on a specific question
 ```
 
-## Using with Streaming Logs (logcat, Xcode, etc.)
+### What clog Does
 
-clog processes logs after they complete (batch mode). For streaming tools:
+**Compression Pass:**
+1. Deduplicates consecutive identical lines
+2. Normalizes timestamps, UUIDs, IDs, IPs to placeholders
+3. Templates similar lines and counts occurrences
+4. Preserves error context windows (lines around ERROR/WARN/EXCEPTION)
+5. Tracks timeline from first to last timestamp
+
+**LLM Summary:**
+- What happened (1-3 bullets)
+- Top error signatures
+- Timeline
+- Most likely root causes
+- Suggested debugging steps
+
+## Direct Ollama Usage
+
+```bash
+# Summarize any text
+cat document.txt | ollama run qwen2.5:7b-instruct "Summarize this"
+
+# Generate commit message
+git diff --staged | ollama run qwen2.5:7b-instruct "Write a commit message"
+
+# Code explanation
+cat script.py | ollama run qwen2.5:7b-instruct "What does this do?"
+```
+
+## Streaming Logs (logcat, Xcode, etc.)
+
+clog processes logs in batch mode. For streaming tools:
 
 ```bash
 # Android logcat - capture then analyze
 adb logcat -d > logcat.txt && clog logcat.txt
-# Or with timeout:
+
+# With timeout
 timeout 30 adb logcat > logcat.txt; clog logcat.txt
 
-# Xcode console - copy logs to file, then:
-clog ~/Desktop/xcode_console.log
-
-# Tail with limit - capture last N lines then analyze
+# Tail with limit
 adb logcat -t 1000 | clog
 kubectl logs --tail=500 deployment/api | clog
-
-# Live tail with periodic snapshots (shell loop)
-while true; do
-  adb logcat -t 500 | clog --no-llm > /tmp/latest_summary.txt
-  sleep 30
-done
 ```
 
-For true real-time streaming, capture to a file and analyze periodically, or use `--max-lines` to limit processing.
-
-## What clog Does
-
-### Deterministic Compression Pass
-1. **Deduplicates** consecutive identical lines
-2. **Normalizes** timestamps, UUIDs, IDs, IPs to placeholders
-3. **Templates** similar lines and counts occurrences
-4. **Preserves** error context windows (lines around ERROR/WARN/EXCEPTION)
-5. **Tracks** coarse timeline from first to last timestamp
-
-### LLM Summary (via Qwen2.5 7B)
-Produces structured markdown with:
-- What happened (1-3 bullets)
-- Top error signatures (table)
-- Timeline (coarse)
-- Most likely root causes (ranked)
-- Suggested debugging steps (ranked)
-
-## Example Output
+## Example clog Output
 
 ```markdown
 # Log Compression Summary
@@ -123,11 +266,7 @@ Produces structured markdown with:
 ## Error Signatures
 | Count | First | Last | Template |
 |-------|-------|------|----------|
-| 127 | L1205 | L14892 | `ERROR: Connection to <IP>:<PORT> failed: <ID>` |
-
-## Error Context Windows
-### Window 1 (lines 1200-1210)
-...
+| 127 | L1205 | L14892 | `ERROR: Connection to <IP>:<PORT> failed` |
 
 ## LLM Analysis
 ### What Happened
@@ -136,261 +275,37 @@ Produces structured markdown with:
 - Service degraded to 50% capacity
 
 ### Most Likely Root Causes
-1. Database connection pool exhaustion (evidence: 127 connection failures)
-2. Network partition to database server (evidence: all failures to same IP)
-
-### Suggested Next Debugging Steps
-1. Check database server health and connection limits
-2. Review connection pool configuration
-3. Check for network issues between app and DB
+1. Database connection pool exhaustion
+2. Network partition to database server
 ```
 
-## Recommended Workflow
+---
 
-### For Log Analysis (saves the most tokens)
+# Advanced
 
-```bash
-# 1. Run clog locally FIRST
-clog app.log
+## Add More Models
 
-# 2. Copy the output
-# 3. Paste to Claude: "Here's my compressed log summary, what went wrong?"
-```
-
-### For Quick Local Analysis (no Claude needed)
-
-```bash
-# Get analysis from local model only
-clog app.log
-# The output includes LLM analysis from Qwen2.5 7B
-```
-
-### For General Tasks with Local Model
-
-```bash
-# Summarize any text
-cat document.txt | ollama run qwen2.5:7b-instruct "Summarize this"
-
-# Generate commit message
-git diff --staged | ollama run qwen2.5:7b-instruct "Write a commit message"
-
-# Quick code explanation
-cat script.py | ollama run qwen2.5:7b-instruct "What does this do?"
-```
-
-## Reference Documentation
-
-The files in `~/.claude/agents/` are reference guides for using this pipeline:
-- `log-summarizer.md` - Best practices for log analysis workflow
-- `local-agent.md` - When and how to use the local model
-
-These are documentation files, not automated hooks. To save tokens, always run `clog` manually before pasting logs to Claude.
-
-## Troubleshooting
-
-### "clog: command not found"
-```bash
-# Add to PATH
-export PATH="$HOME/bin:$PATH"
-# Or source your shell config
-source ~/.zshrc
-```
-
-### "Ollama not running"
-```bash
-# Start Ollama service
-brew services start ollama
-# Or run manually
-ollama serve
-```
-
-### "Model not found"
-```bash
-# Pull the model
-ollama pull qwen2.5:7b-instruct
-```
-
-### Slow first run
-Normal - the model needs to load into memory. Subsequent runs are faster.
-
-### Out of memory
-Try a smaller model:
-```bash
-ollama pull qwen2.5:3b-instruct
-clog --model qwen2.5:3b-instruct app.log
-```
-
-## Advanced Usage
-
-### Using with Docker logs
-```bash
-docker logs --tail 10000 mycontainer 2>&1 | clog
-```
-
-### Using with Kubernetes
-```bash
-kubectl logs -f deployment/myapp --tail=5000 | clog
-```
-
-### Using with journalctl
-```bash
-journalctl -u myservice --since "1 hour ago" | clog
-```
-
-### Processing multiple files
-```bash
-clog app.log error.log debug.log
-```
-
-### JSON output for scripts
-```bash
-clog --json app.log | jq '.templates | length'
-```
-
-## File Locations
-
-- CLI tool: `~/bin/clog` → `~/Library/Python/3.9/bin/clog`
-- Source: `~/claude-log-compression/clog/clog.py`
-- Agents: `~/.claude/agents/log-summarizer.md`, `~/.claude/agents/local-agent.md`
-- Ollama models: `~/.ollama/models/`
-
-## Sharing with Colleagues
-
-### Option 1: Share the install script
-
-```bash
-# Copy this folder to a shared location or git repo
-cp -r ~/claude-log-compression /path/to/shared/
-
-# Colleagues run:
-/path/to/shared/claude-log-compression/install.sh
-```
-
-### Option 2: Quick one-liner (if hosted)
-
-If you host the install script (e.g., on GitHub, internal server):
-```bash
-curl -fsSL https://your-server/install.sh | bash
-```
-
-### Option 3: Manual steps
-
-Share these instructions:
-```bash
-# 1. Install Ollama
-brew install ollama  # macOS
-# or: curl -fsSL https://ollama.ai/install.sh | sh  # Linux
-
-# 2. Start Ollama
-brew services start ollama
-
-# 3. Pull model
-ollama pull qwen2.5:7b-instruct
-
-# 4. Install clog (copy clog.py to their machine)
-mkdir -p ~/.local/share/clog ~/bin
-# Copy clog.py to ~/.local/share/clog/
-echo '#!/bin/bash
-exec python3 ~/.local/share/clog/clog.py "$@"' > ~/bin/clog
-chmod +x ~/bin/clog
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
-```
-
-### What colleagues need
-
-- macOS or Linux
-- Python 3.8+
-- ~5GB disk space for model
-- 8GB+ RAM recommended
-
-## Extending
-
-### Add more models
 ```bash
 ollama pull llama3:8b
 ollama pull mistral:7b
 ollama pull codellama:7b  # For code-heavy logs
 ```
 
-### Modify compression patterns
-Edit `clog/clog.py` and update the `PATTERNS` dict.
-
-### Customize summary format
-Edit the `generate_llm_summary()` function in clog.py.
-
-## MCP Server (Native Claude Tool)
-
-You can also expose `clog` and `local_llm` as native Claude Code tools via MCP (Model Context Protocol). This allows Claude to use these tools directly without manual invocation.
-
-### Install MCP Server
-
-```bash
-# 1. Create virtual environment (requires Python 3.10+)
-cd ~/claude-log-compression/mcp-server
-/opt/homebrew/bin/python3 -m venv venv  # macOS with Homebrew
-# or: python3.10 -m venv venv  # Linux
-
-# 2. Install MCP
-source venv/bin/activate
-pip install mcp
-
-# 3. Register with Claude Code
-claude mcp add --transport stdio llm-offload --scope user -- \
-  ~/claude-log-compression/mcp-server/venv/bin/python \
-  ~/claude-log-compression/mcp-server/server.py
-
-# 4. Verify
-claude mcp list
-```
-
-### Available MCP Tools
-
-Once registered, Claude Code has access to:
-
-| Tool | Description |
-|------|-------------|
-| `clog` | Compress and summarize log files (file read locally, saves tokens) |
-| `local_llm` | Run prompts through Ollama with optional file input |
-| `pipe_to_llm` | Run shell command and pipe output to LLM (output never seen by Claude) |
-| `pipe_to_clog` | Run shell command and pipe output through clog (for log-producing commands) |
-| `clog_file_list` | List log files in a directory with sizes |
-
-### Example Usage (from Claude's perspective)
-
-```python
-# Analyze a log file (clog reads the file, Claude only sees summary)
-clog(file_path="/var/log/app.log", prompt="What caused the OOM?")
-
-# Process a file with local LLM (file read locally, saves tokens)
-local_llm(prompt="Write unit tests for these functions", input_file="api.py")
-
-# Pipe command output to LLM (Claude never sees the raw output)
-pipe_to_llm(command="git diff HEAD~5", prompt="Write a changelog for these changes")
-
-# Pipe log-producing commands through clog
-pipe_to_clog(command="docker logs myapp --tail 1000", prompt="What caused the crash?")
-pipe_to_clog(command="kubectl logs deployment/api", prompt="Any errors?")
-pipe_to_clog(command="journalctl -u nginx --since '1 hour ago'")
-
-# Find log files to analyze
-clog_file_list(directory="./logs", pattern="*.log")
-```
-
-### Key Design Principle
-
-All tools read files/commands locally - Claude never sees the raw content, only the processed result. This is what saves tokens.
-
-### Verified Working
-
-All 5 MCP tools have been tested:
-- `clog_file_list` - Lists log files with sizes
-- `local_llm` - Runs prompts through Ollama
-- `pipe_to_llm` - Pipes command output to LLM
-- `clog` - Analyzes log files with compression + LLM summary
-- `pipe_to_clog` - Pipes command output through clog
-
-### Remove MCP Server
+## Remove MCP Server
 
 ```bash
 claude mcp remove llm-offload -s user
 ```
+
+## File Locations
+
+- MCP Server: `~/llm-offload/mcp-server/server.py`
+- clog CLI: `~/bin/clog`
+- Ollama models: `~/.ollama/models/`
+
+## Requirements
+
+- macOS or Linux
+- Python 3.10+
+- ~5GB disk space for model
+- 8GB+ RAM recommended
