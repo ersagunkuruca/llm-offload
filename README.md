@@ -21,7 +21,8 @@ This way Claude never sees the raw 15,000 lines - only the ~50 line summary.
 1. **Ollama** - Local LLM runtime (runs on your machine, free)
 2. **Qwen2.5 7B Instruct** - Default model for summarization (local)
 3. **clog** - CLI tool for log compression and summarization
-4. **Reference docs** - Agent behavior guides in `~/.claude/agents/`
+4. **MCP Server** - Optional native Claude Code tool integration
+5. **Reference docs** - Agent behavior guides in `~/.claude/agents/`
 
 ## Quick Start
 
@@ -319,3 +320,51 @@ Edit `/Users/ersagunkuruca/claude-log-compression/clog/clog.py` and update the `
 
 ### Customize summary format
 Edit the `generate_llm_summary()` function in clog.py.
+
+## MCP Server (Native Claude Tool)
+
+You can also expose `clog` and `local_llm` as native Claude Code tools via MCP (Model Context Protocol). This allows Claude to use these tools directly without manual invocation.
+
+### Install MCP Server
+
+```bash
+# 1. Create virtual environment (requires Python 3.10+)
+cd ~/claude-log-compression/mcp-server
+/opt/homebrew/bin/python3 -m venv venv  # macOS with Homebrew
+# or: python3.10 -m venv venv  # Linux
+
+# 2. Install MCP
+source venv/bin/activate
+pip install mcp
+
+# 3. Register with Claude Code
+claude mcp add --transport stdio llm-offload --scope user -- \
+  ~/claude-log-compression/mcp-server/venv/bin/python \
+  ~/claude-log-compression/mcp-server/server.py
+
+# 4. Verify
+claude mcp list
+```
+
+### Available MCP Tools
+
+Once registered, Claude Code has access to:
+
+| Tool | Description |
+|------|-------------|
+| `clog` | Compress and summarize log files using local LLM |
+| `local_llm` | Run any prompt through Ollama (for token-heavy simple tasks) |
+| `clog_file_list` | List log files in a directory with sizes |
+
+### Example Usage (from Claude's perspective)
+
+Claude can now call these tools directly:
+- `clog(file_path="/var/log/app.log", prompt="What caused the OOM?")`
+- `local_llm(prompt="Summarize this", input_file="report.txt")`
+- `clog_file_list(directory="./logs", pattern="*.log")`
+
+### Remove MCP Server
+
+```bash
+claude mcp remove llm-offload -s user
+```

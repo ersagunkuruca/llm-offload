@@ -19,3 +19,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Virtual environments
+venv/
+.venv/
