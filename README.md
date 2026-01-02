@@ -1,10 +1,10 @@
-# Log Compression Pipeline for Claude Code
+# LLM Offload for Claude Code
 
-A complete log summarization pipeline that reduces token spend by compressing and summarizing logs **before** they enter Claude's context window.
+Offload token-heavy tasks to a local LLM to save context window space and reduce costs. Includes specialized log compression and a general-purpose local LLM interface.
 
 ## How Token Savings Work
 
-**Important**: To save tokens, you must run `clog` BEFORE sending logs to Claude:
+**Important**: To save tokens, offload processing to the local model BEFORE sending to Claude:
 
 ```bash
 # Step 1: Compress logs locally (uses local LLM, not Claude)
@@ -27,20 +27,17 @@ This way Claude never sees the raw 15,000 lines - only the ~50 line summary.
 ## Quick Start
 
 ```bash
-# Compress and summarize a log file
+# Log compression and summarization
 clog app.log
+clog -p "What caused the OOM error?" app.log
+docker logs myapp | clog
+
+# General-purpose local LLM
+ollama run qwen2.5:7b-instruct "Summarize this" < report.txt
+git diff | ollama run qwen2.5:7b-instruct "Write a commit message"
 
 # Compression only (no LLM)
 clog --no-llm app.log
-
-# Focus on a specific question
-clog -p "What caused the OOM error?" app.log
-
-# From stdin
-docker logs myapp | clog
-
-# JSON output for automation
-clog --json app.log
 ```
 
 ## Installation Verification
