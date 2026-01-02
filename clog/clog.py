@@ -297,7 +297,7 @@ def format_compressed_output(compressed: CompressedOutput, as_json: bool = False
     return "\n".join(lines)
 
 
-def call_ollama(prompt: str, model: str = "qwen2.5:7b-instruct") -> str:
+def call_ollama(prompt: str, model: str = "qwen2.5:3b-instruct") -> str:
     """Call Ollama API to get LLM summary."""
     try:
         result = subprocess.run(
@@ -318,7 +318,7 @@ def call_ollama(prompt: str, model: str = "qwen2.5:7b-instruct") -> str:
         return f"Error calling Ollama: {e}"
 
 
-def generate_llm_summary(compressed: CompressedOutput, model: str = "qwen2.5:7b-instruct", user_prompt: str = None) -> str:
+def generate_llm_summary(compressed: CompressedOutput, model: str = "qwen2.5:3b-instruct", user_prompt: str = None) -> str:
     """Generate an LLM summary of the compressed logs."""
 
     # Build prompt
@@ -399,7 +399,7 @@ Examples:
     parser.add_argument('--max-lines', type=int, default=None, help='Maximum lines to process')
     parser.add_argument('--around-error', '-K', type=int, default=5, help='Lines to keep around errors (default: 5)')
     parser.add_argument('--json', action='store_true', help='Output as JSON')
-    parser.add_argument('--model', type=str, default='qwen2.5:7b-instruct', help='Ollama model to use (default: qwen2.5:7b-instruct)')
+    parser.add_argument('--model', type=str, default='qwen2.5:3b-instruct', help='Ollama model to use (default: qwen2.5:3b-instruct)')
     parser.add_argument('--compression-only', action='store_true', help='Alias for --no-llm')
     parser.add_argument('--prompt', '-p', type=str, default=None, help='Custom prompt/question to focus the LLM analysis')
 

@@ -73,7 +73,7 @@ def clog(
 def local_llm(
     prompt: str,
     input_file: str = None,
-    model: str = "qwen2.5:7b-instruct"
+    model: str = "qwen2.5:3b-instruct"
 ) -> str:
     """Run a prompt through the local Ollama LLM.
 
@@ -85,7 +85,7 @@ def local_llm(
     Args:
         prompt: The instruction/question for the LLM
         input_file: Optional file path to read and process (read locally, saves tokens)
-        model: Ollama model to use (default: qwen2.5:7b-instruct)
+        model: Ollama model to use (default: qwen2.5:3b-instruct)
 
     Returns:
         LLM response
@@ -127,7 +127,7 @@ def local_llm(
 def pipe_to_llm(
     command: str,
     prompt: str,
-    model: str = "qwen2.5:7b-instruct"
+    model: str = "qwen2.5:3b-instruct"
 ) -> str:
     """Run a shell command and pipe its output to the local LLM.
 
@@ -137,7 +137,7 @@ def pipe_to_llm(
     Args:
         command: Shell command to run (e.g., "git diff", "docker logs app")
         prompt: Instruction for the LLM on how to process the output
-        model: Ollama model to use (default: qwen2.5:7b-instruct)
+        model: Ollama model to use (default: qwen2.5:3b-instruct)
 
     Returns:
         LLM response based on command output

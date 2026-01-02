@@ -28,7 +28,7 @@ cd llm-offload
 
 This installs:
 - **Ollama** - Local LLM runtime
-- **Qwen2.5 7B** - Default model for analysis
+- **Qwen2.5 3B** - Default model for analysis
 - **clog** - Log compression CLI
 - **MCP Server** - Claude Code integration
 
@@ -146,7 +146,7 @@ ollama serve                 # manual start
 
 ### "Model not found"
 ```bash
-ollama pull qwen2.5:7b-instruct
+ollama pull qwen2.5:3b-instruct
 ```
 
 ### Slow first run
@@ -229,13 +229,13 @@ Options:
 
 ```bash
 # Summarize any text
-cat document.txt | ollama run qwen2.5:7b-instruct "Summarize this"
+cat document.txt | ollama run qwen2.5:3b-instruct "Summarize this"
 
 # Generate commit message
-git diff --staged | ollama run qwen2.5:7b-instruct "Write a commit message"
+git diff --staged | ollama run qwen2.5:3b-instruct "Write a commit message"
 
 # Code explanation
-cat script.py | ollama run qwen2.5:7b-instruct "What does this do?"
+cat script.py | ollama run qwen2.5:3b-instruct "What does this do?"
 ```
 
 ## Streaming Logs (logcat, Xcode, etc.)

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # LLM Offload Pipeline Installer
-# Installs: Ollama, Qwen2.5 7B model, clog CLI, MCP server
+# Installs: Ollama, Qwen2.5 3B model, clog CLI, MCP server
 #
 # Usage: curl -fsSL <url>/install.sh | bash
 #    or: ./install.sh
@@ -76,11 +76,11 @@ fi
 echo
 
 # Step 3: Pull the model
-echo "Step 3: Pulling Qwen2.5 7B model (this may take a few minutes)..."
-if ollama list 2>/dev/null | grep -q "qwen2.5:7b-instruct"; then
+echo "Step 3: Pulling Qwen2.5 3B model (this may take a few minutes)..."
+if ollama list 2>/dev/null | grep -q "qwen2.5:3b-instruct"; then
     success "Model already downloaded"
 else
-    ollama pull qwen2.5:7b-instruct
+    ollama pull qwen2.5:3b-instruct
     success "Model downloaded"
 fi
 echo
@@ -290,7 +290,7 @@ def format_compressed_output(compressed, as_json=False):
         lines.append("")
     return "\n".join(lines)
 
-def call_ollama(prompt, model="qwen2.5:7b-instruct"):
+def call_ollama(prompt, model="qwen2.5:3b-instruct"):
     try:
         result = subprocess.run(
             ["ollama", "run", model], input=prompt,
@@ -306,7 +306,7 @@ def call_ollama(prompt, model="qwen2.5:7b-instruct"):
     except Exception as e:
         return f"Error calling Ollama: {e}"
 
-def generate_llm_summary(compressed, model="qwen2.5:7b-instruct", user_prompt=None):
+def generate_llm_summary(compressed, model="qwen2.5:3b-instruct", user_prompt=None):
     compressed_text = format_compressed_output(compressed, as_json=False)
     if user_prompt:
         prompt = f"""You are a log analysis expert. Analyze the following compressed log data to answer this specific question:
@@ -373,7 +373,7 @@ Examples:
     parser.add_argument('--max-lines', type=int, default=None, help='Maximum lines to process')
     parser.add_argument('--around-error', '-K', type=int, default=5, help='Lines around errors (default: 5)')
     parser.add_argument('--json', action='store_true', help='Output as JSON')
-    parser.add_argument('--model', type=str, default='qwen2.5:7b-instruct', help='Ollama model')
+    parser.add_argument('--model', type=str, default='qwen2.5:3b-instruct', help='Ollama model')
     parser.add_argument('--compression-only', action='store_true', help='Alias for --no-llm')
     parser.add_argument('--prompt', '-p', type=str, default=None, help='Custom prompt/question to focus the LLM analysis')
     args = parser.parse_args()
@@ -465,7 +465,7 @@ The clog tool:
 - Deduplicates and normalizes log lines
 - Groups into templates with counts
 - Preserves error context windows
-- Generates LLM analysis locally (free, uses Qwen2.5 7B)
+- Generates LLM analysis locally (free, uses Qwen2.5 3B)
 - Supports focused questions with -p flag
 AGENT_EOF
 
@@ -479,8 +479,8 @@ Use the local Ollama model for:
 - Bulk operations
 
 Commands:
-  ollama run qwen2.5:7b-instruct "Your prompt"
-  cat file.txt | ollama run qwen2.5:7b-instruct "Summarize this"
+  ollama run qwen2.5:3b-instruct "Your prompt"
+  cat file.txt | ollama run qwen2.5:3b-instruct "Summarize this"
   clog app.log                          # Log compression + summary
   clog -p "What caused the crash?" log  # Focused analysis
 AGENT_EOF
@@ -571,7 +571,7 @@ def clog(
 def local_llm(
     prompt: str,
     input_file: str = None,
-    model: str = "qwen2.5:7b-instruct"
+    model: str = "qwen2.5:3b-instruct"
 ) -> str:
     """Run a prompt through the local Ollama LLM.
 
@@ -583,7 +583,7 @@ def local_llm(
     Args:
         prompt: The instruction/question for the LLM
         input_file: Optional file path to read and process (read locally, saves tokens)
-        model: Ollama model to use (default: qwen2.5:7b-instruct)
+        model: Ollama model to use (default: qwen2.5:3b-instruct)
 
     Returns:
         LLM response
@@ -625,7 +625,7 @@ def local_llm(
 def pipe_to_llm(
     command: str,
     prompt: str,
-    model: str = "qwen2.5:7b-instruct"
+    model: str = "qwen2.5:3b-instruct"
 ) -> str:
     """Run a shell command and pipe its output to the local LLM.
 
@@ -635,7 +635,7 @@ def pipe_to_llm(
     Args:
         command: Shell command to run (e.g., "git diff", "docker logs app")
         prompt: Instruction for the LLM on how to process the output
-        model: Ollama model to use (default: qwen2.5:7b-instruct)
+        model: Ollama model to use (default: qwen2.5:3b-instruct)
 
     Returns:
         LLM response based on command output
@@ -863,7 +863,7 @@ echo "==================================="
 echo
 echo "Installed components:"
 echo "  - Ollama LLM runtime"
-echo "  - Qwen2.5 7B Instruct model"
+echo "  - Qwen2.5 3B Instruct model"
 echo "  - clog CLI tool"
 if [ -n "$PYTHON_CMD" ]; then
 echo "  - MCP server (llm-offload)"
