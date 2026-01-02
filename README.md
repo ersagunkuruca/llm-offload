@@ -380,6 +380,15 @@ clog_file_list(directory="./logs", pattern="*.log")
 
 All tools read files/commands locally - Claude never sees the raw content, only the processed result. This is what saves tokens.
 
+### Verified Working
+
+All 5 MCP tools have been tested:
+- `clog_file_list` - Lists log files with sizes
+- `local_llm` - Runs prompts through Ollama
+- `pipe_to_llm` - Pipes command output to LLM
+- `clog` - Analyzes log files with compression + LLM summary
+- `pipe_to_clog` - Pipes command output through clog
+
 ### Remove MCP Server
 
 ```bash
