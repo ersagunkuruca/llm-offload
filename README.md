@@ -316,7 +316,7 @@ ollama pull codellama:7b  # For code-heavy logs
 ```
 
 ### Modify compression patterns
-Edit `/Users/ersagunkuruca/claude-log-compression/clog/clog.py` and update the `PATTERNS` dict.
+Edit `clog/clog.py` and update the `PATTERNS` dict.
 
 ### Customize summary format
 Edit the `generate_llm_summary()` function in clog.py.
@@ -359,9 +359,29 @@ Once registered, Claude Code has access to:
 ### Example Usage (from Claude's perspective)
 
 Claude can now call these tools directly:
-- `clog(file_path="/var/log/app.log", prompt="What caused the OOM?")`
-- `local_llm(prompt="Summarize this", input_file="report.txt")`
-- `clog_file_list(directory="./logs", pattern="*.log")`
+
+```python
+# Analyze a log file with a focused question
+clog(file_path="/var/log/app.log", prompt="What caused the OOM?")
+
+# Analyze log content directly (e.g., from command output)
+clog(log_content="...", prompt="What caused the errors?")
+
+# Offload summarization to local model
+local_llm(prompt="Summarize this in one sentence", input_text="...")
+
+# Generate boilerplate locally
+local_llm(prompt="Write unit tests for these functions", input_file="api.py")
+
+# Find log files to analyze
+clog_file_list(directory="./logs", pattern="*.log")
+```
+
+### Verified Working
+
+Both tools have been tested and work correctly:
+- `local_llm`: Handles creative prompts, summarization, and text processing
+- `clog`: Compresses logs, identifies error patterns, and provides LLM analysis
 
 ### Remove MCP Server
 
